@@ -74,34 +74,53 @@
           data = JSON.parse(text);
           
           if (data.success) {
-            const ratio = ((data.csv_size / data.original_size) * 100).toFixed(1);
-            const isLarger = data.csv_size > data.original_size;
+            const csvRatio = ((data.csv_size / data.original_size) * 100).toFixed(1);
+            const zipRatio = ((data.zip_size / data.original_size) * 100).toFixed(1);
+            const savings = (data.original_size - data.zip_size).toFixed(2);
+            const savingsPercent = (100 - zipRatio).toFixed(1);
             
             resultDiv.innerHTML = `
               <div class="success">
-                ✅ Converted successfully!<br>
+                ✅ Converted successfully!<br><br>
+                <strong>📊 File Sizes:</strong><br>
                 📄 Original XLSX: ${data.original_size} KB<br>
-                📉 Output CSV: ${data.csv_size} KB (${ratio}% of original)<br>
+                📋 CSV (uncompressed): ${data.csv_size} KB (${csvRatio}% of original)<br>
+                🗜️ <strong>ZIP (compressed): ${data.zip_size} KB (${zipRatio}% of original)</strong><br>
+                💾 Space saved: ${savings} KB (${savingsPercent}% reduction)<br>
+                📦 CSV compression: ${data.compression_ratio}% of CSV size<br><br>
+                <strong>📈 Data Info:</strong><br>
                 📊 Rows written: ${data.rows_written}<br>
                 📐 Excel dimensions: ${data.excel_dimensions || 'N/A'}<br>
                 📏 Total columns in Excel: ${data.total_columns_in_excel || 'N/A'}<br>
                 ✅ Columns with actual data: ${data.columns_with_data || 'N/A'}<br><br>
-                <a href="${data.csv_file}" download>⬇️ Download CSV</a>
-                ${isLarger ? '<div class="warning">⚠️ CSV is larger than XLSX - this is normal when XLSX has compression but CSV is plain text</div>' : ''}
+                <a href="${data.zip_file}" download style="font-weight: bold; font-size: 16px;">⬇️ Download CSV.zip</a>
               </div>
             `;
           } else {
-            resultDiv.innerHTML = `<div class="error">❌ Error: ${data.message}</div>`;
+            resultDiv.innerHTML = `
+              <div class="error">
+                ❌ Error: ${data.message}<br><br>
+                ${data.details ? `<strong>Technical details:</strong><div class="debug">${data.details}</div>` : ''}
+              </div>
+            `;
           }
         } catch (e) {
+          // Check if response looks like HTML (server error page)
+          const isHtml = text.trim().startsWith('<!') || text.trim().startsWith('<html');
+          
           resultDiv.innerHTML = `
             <div class="error">
               ❌ Server Error (Status: ${response.status})<br><br>
+              ${isHtml ? 
+                '<strong>The server returned an HTML error page instead of JSON. This usually means:</strong><br>1. PhpSpreadsheet is not installed (run: composer require phpoffice/phpspreadsheet)<br>2. There\'s a syntax error in upload.php<br>3. Check XAMPP error logs for details<br><br>' : 
+                '<strong>Failed to parse server response</strong><br><br>'
+              }
               <strong>Raw server response:</strong>
-              <div class="debug">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              <div class="debug">${text.substring(0, 1000).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
             </div>
           `;
           console.error('JSON parse error:', e);
+          console.error('Full response:', text);
         }
 
       } catch (error) {

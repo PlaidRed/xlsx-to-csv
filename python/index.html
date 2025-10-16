@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Excel to CSV Converter</title>
+  <style>
+    body { font-family: Arial; max-width: 600px; margin: 40px auto; }
+    .container { padding: 20px; border: 1px solid #ccc; border-radius: 10px; }
+    button { margin-top: 10px; padding: 8px 16px; cursor: pointer; }
+    #result { margin-top: 20px; }
+    .error { color: #d32f2f; }
+    .success { color: #388e3c; }
+    .debug { 
+      background: #f5f5f5; 
+      padding: 10px; 
+      margin-top: 10px; 
+      border: 1px solid #ddd;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .warning { color: #f57c00; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Excel (.xlsx) → CSV Converter</h2>
+    <form id="uploadForm">
+      <input type="file" name="excel_file" accept=".xlsx,.xls" required><br><br>
+      <button type="submit">Upload & Convert</button>
+    </form>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      resultDiv.innerHTML = '⏳ Processing...';
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const text = await response.text();
+        
+        console.log('=== RAW RESPONSE ===');
+        console.log(text);
+        console.log('=== STATUS ===', response.status);
+        console.log('=== END RESPONSE ===');
+
+        if (!text || text.trim() === '') {
+          resultDiv.innerHTML = `
+            <div class="error">
+              ❌ Server returned empty response (Status: ${response.status})<br><br>
+              Check your Flask server logs
+            </div>
+          `;
+          return;
+        }
+
+        let data;
+        try {
+          data = JSON.parse(text);
+          
+          if (data.success) {
+            const csvRatio = ((data.csv_size / data.original_size) * 100).toFixed(1);
+            const zipRatio = ((data.zip_size / data.original_size) * 100).toFixed(1);
+            const savings = (data.original_size - data.zip_size).toFixed(2);
+            const savingsPercent = (100 - zipRatio).toFixed(1);
+            
+            resultDiv.innerHTML = `
+              <div class="success">
+                ✅ Converted successfully!<br><br>
+                <strong>📊 File Sizes:</strong><br>
+                📄 Original XLSX: ${data.original_size} KB<br>
+                📋 CSV (uncompressed): ${data.csv_size} KB (${csvRatio}% of original)<br>
+                🗜️ <strong>ZIP (compressed): ${data.zip_size} KB (${zipRatio}% of original)</strong><br>
+                💾 Space saved: ${savings} KB (${savingsPercent}% reduction)<br>
+                📦 CSV compression: ${data.compression_ratio}% of CSV size<br><br>
+                <strong>📈 Data Info:</strong><br>
+                📊 Rows written: ${data.rows_written}<br>
+                📐 Excel dimensions: ${data.excel_dimensions || 'N/A'}<br>
+                📏 Total columns in Excel: ${data.total_columns_in_excel || 'N/A'}<br>
+                ✅ Columns with actual data: ${data.columns_with_data || 'N/A'}<br><br>
+                <a href="${data.zip_file}" download style="font-weight: bold; font-size: 16px;">⬇️ Download CSV.zip</a>
+              </div>
+            `;
+          } else {
+            resultDiv.innerHTML = `
+              <div class="error">
+                ❌ Error: ${data.message}<br><br>
+                ${data.details ? `<strong>Technical details:</strong><div class="debug">${data.details}</div>` : ''}
+              </div>
+            `;
+          }
+        } catch (e) {
+          // Check if response looks like HTML (server error page)
+          const isHtml = text.trim().startsWith('<!') || text.trim().startsWith('<html');
+          
+          resultDiv.innerHTML = `
+            <div class="error">
+              ❌ Server Error (Status: ${response.status})<br><br>
+              ${isHtml ? 
+                '<strong>The server returned an HTML error page instead of JSON. This usually means:</strong><br>1. Python module is missing (try: pip install -r requirements.txt)<br>2. There\'s a syntax error in app.py<br>3. Check the terminal/console where Flask is running for error details<br><br>' : 
+                '<strong>Failed to parse server response</strong><br><br>'
+              }
+              <strong>Raw server response:</strong>
+              <div class="debug">${text.substring(0, 1000).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+          `;
+          console.error('JSON parse error:', e);
+          console.error('Full response:', text);
+        }
+
+      } catch (error) {
+        resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+        console.error('Fetch error:', error);
+      }
+    });
+  </script>
+</body>
+</html>

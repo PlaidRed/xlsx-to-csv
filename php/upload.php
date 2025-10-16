@@ -124,21 +124,50 @@ try {
     
     $csvSize = round(filesize($csvFileName) / 1024, 2);
     
+    // Create ZIP file
+    $zipFileName = $targetDir . uniqid() . '.zip';
+    $zip = new ZipArchive();
+    
+    if ($zip->open($zipFileName, ZipArchive::CREATE) !== TRUE) {
+        @unlink($targetFile);
+        @unlink($csvFileName);
+        sendResponse(false, ['message' => 'Failed to create ZIP file']);
+    }
+    
+    // Add CSV to ZIP with original filename (without UUID)
+    $originalBaseName = pathinfo($fileName, PATHINFO_FILENAME);
+    $zip->addFile($csvFileName, $originalBaseName . '.csv');
+    
+    // Set maximum compression
+    $zip->setCompressionName($originalBaseName . '.csv', ZipArchive::CM_DEFLATE, 9);
+    
+    $zip->close();
+    
+    $zipSize = round(filesize($zipFileName) / 1024, 2);
+    
+    // Calculate compression ratio
+    $compressionRatio = $csvSize > 0 ? round(($zipSize / $csvSize) * 100, 1) : 0;
+    
+    // Clean up temporary files
     @unlink($targetFile);
+    @unlink($csvFileName);
 
     sendResponse(true, [
         'original_size' => $originalSize,
         'csv_size' => $csvSize,
-        'csv_file' => 'uploads/' . basename($csvFileName),
+        'zip_size' => $zipSize,
+        'compression_ratio' => $compressionRatio,
+        'zip_file' => 'uploads/' . basename($zipFileName),
         'rows_written' => $rowCount,
         'excel_dimensions' => $highestColumn . $highestRow,
         'total_columns_in_excel' => $highestColumnIndex,
-        'columns_with_data' => count($activeColumns)
+        'columns_with_data' => count($activeColumns),
+        'empty_rows_skipped' => $emptyRowsSkipped
     ]);
 
 } catch (Exception $e) {
-    sendResponse(false, ['message' => 'Error: ' . $e->getMessage()]);
+    sendResponse(false, ['message' => 'Error: ' . $e->getMessage(), 'details' => $e->getTraceAsString()]);
 } catch (Error $e) {
-    sendResponse(false, ['message' => 'Fatal error: ' . $e->getMessage()]);
+    sendResponse(false, ['message' => 'Fatal error: ' . $e->getMessage(), 'details' => $e->getTraceAsString()]);
 }
 ?>
