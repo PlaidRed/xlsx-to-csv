@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Excel to CSV Converter</title>
+  <style>
+    body { font-family: Arial; max-width: 600px; margin: 40px auto; }
+    .container { padding: 20px; border: 1px solid #ccc; border-radius: 10px; }
+    button { margin-top: 10px; padding: 8px 16px; cursor: pointer; }
+    #result { margin-top: 20px; }
+    .error { color: #d32f2f; }
+    .success { color: #388e3c; }
+    .debug { 
+      background: #f5f5f5; 
+      padding: 10px; 
+      margin-top: 10px; 
+      border: 1px solid #ddd;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .warning { color: #f57c00; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Excel (.xlsx) → CSV Converter</h2>
+    <form id="uploadForm">
+      <input type="file" name="excel_file" accept=".xlsx,.xls" required><br><br>
+      <button type="submit">Upload & Convert</button>
+    </form>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const resultDiv = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+
+      resultDiv.innerHTML = '⏳ Processing...';
+
+      try {
+        const response = await fetch('upload.php', {
+          method: 'POST',
+          body: formData
+        });
+
+        const text = await response.text();
+        
+        console.log('=== RAW RESPONSE ===');
+        console.log(text);
+        console.log('=== STATUS ===', response.status);
+        console.log('=== END RESPONSE ===');
+
+        if (!text || text.trim() === '') {
+          resultDiv.innerHTML = `
+            <div class="error">
+              ❌ Server returned empty response (Status: ${response.status})<br><br>
+              Check your PHP error logs in XAMPP
+            </div>
+          `;
+          return;
+        }
+
+        let data;
+        try {
+          data = JSON.parse(text);
+          
+          if (data.success) {
+            const ratio = ((data.csv_size / data.original_size) * 100).toFixed(1);
+            const isLarger = data.csv_size > data.original_size;
+            
+            resultDiv.innerHTML = `
+              <div class="success">
+                ✅ Converted successfully!<br>
+                📄 Original XLSX: ${data.original_size} KB<br>
+                📉 Output CSV: ${data.csv_size} KB (${ratio}% of original)<br>
+                📊 Rows written: ${data.rows_written}<br>
+                📐 Excel dimensions: ${data.excel_dimensions || 'N/A'}<br>
+                📏 Total columns in Excel: ${data.total_columns_in_excel || 'N/A'}<br>
+                ✅ Columns with actual data: ${data.columns_with_data || 'N/A'}<br><br>
+                <a href="${data.csv_file}" download>⬇️ Download CSV</a>
+                ${isLarger ? '<div class="warning">⚠️ CSV is larger than XLSX - this is normal when XLSX has compression but CSV is plain text</div>' : ''}
+              </div>
+            `;
+          } else {
+            resultDiv.innerHTML = `<div class="error">❌ Error: ${data.message}</div>`;
+          }
+        } catch (e) {
+          resultDiv.innerHTML = `
+            <div class="error">
+              ❌ Server Error (Status: ${response.status})<br><br>
+              <strong>Raw server response:</strong>
+              <div class="debug">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            </div>
+          `;
+          console.error('JSON parse error:', e);
+        }
+
+      } catch (error) {
+        resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+        console.error('Fetch error:', error);
+      }
+    });
+  </script>
+</body>
+</html>
